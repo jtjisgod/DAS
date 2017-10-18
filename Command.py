@@ -1,4 +1,6 @@
 from CommandHelp import *
+from CommandClear import *
+from CommandExit import *
 from ArpSpoofing import *
 from DnsSpoofing import *
 from SSLStrip import *
@@ -9,17 +11,21 @@ class Command :
 
     def __init__(self) :
 
-        commandModules = [CommandHelp, ArpSpoofing, DnsSpoofing, SSLStrip]
+        commandModules = [CommandHelp, CommandClear, CommandExit, ArpSpoofing, DnsSpoofing, SSLStrip]
 
         for commandModule in commandModules :
             self.commandLine[commandModule.command] = [commandModule, commandModule.outline]
 
         while True :
-            self.viewMenu()
             c = input("Command : ")
-            obj = self.commandLine.get(c, [CommandErr])[0]()
-            obj.run()
-            del obj
+            if c == "help" :
+                self.viewMenu()
+            elif c.strip() == "" :
+                pass
+            else :
+                obj = self.commandLine.get(c, [CommandErr])[0]()
+                obj.run()
+                del obj
 
     def viewMenu(self) :
         print("======== MENU ========")

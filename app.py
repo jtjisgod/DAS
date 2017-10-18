@@ -1,7 +1,7 @@
 import Command
 
 def main()  :
-    Command
+    Command.Command()
 
 if __name__ == '__main__':
     main()
