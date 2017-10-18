@@ -1,0 +1,35 @@
+from CommandHelp import *
+from ArpSpoofing import *
+from DnsSpoofing import *
+from SSLStrip import *
+
+class Command :
+
+    commandLine = {}
+
+    def __init__(self) :
+
+        commandModules = [CommandHelp, ArpSpoofing, DnsSpoofing, SSLStrip]
+
+        for commandModule in commandModules :
+            self.commandLine[commandModule.command] = [commandModule, commandModule.outline]
+
+        while True :
+            self.viewMenu()
+            c = input("Command : ")
+            obj = self.commandLine.get(c, [CommandErr])[0]()
+            obj.run()
+            del obj
+
+    def viewMenu(self) :
+        print("======== MENU ========")
+        for key, value in self.commandLine.items() :
+            print(key + "\t: " + value[1])
+        print("======================")
+
+class CommandErr :
+    def run(self) :
+        print("Error! Command is not exist!")
+
+if __name__ == '__main__':
+    command = Command()
