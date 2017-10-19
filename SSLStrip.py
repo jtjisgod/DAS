@@ -75,5 +75,6 @@ class SSLStrip(CommandModule) :
     def arpSpoofing(self) :
         pass
 
-sslStrip = SSLStrip()
-sslStrip.run()
+if __name__ == '__main__':
+    sslStrip = SSLStrip()
+    sslStrip.run()
