@@ -78,5 +78,6 @@ class NetSetup() :
 
 
 
-sslStrip = SSLStrip()
-sslStrip.run()
+if __name__ == '__main__':
+    sslStrip = SSLStrip()
+    sslStrip.run()
