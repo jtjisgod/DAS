@@ -9,11 +9,15 @@ class SSLStrip(CommandModule) :
     manual = "This command can sniff the data which someone communicates on ssl"
 
     def run(self) :
-        if False == NetSetup.checkIpForward() :
-            NetSetup.ipForward()
+        if False == NetSetup.getInstance().checkIpForward() :
+            NetSetup.getInstance().ipForward()
 
-        if False == NetSetup.checkIpTables() :
-            NetSetup.ipTables()
+
+        checkOpt = "\"tcp dpt:80 redir ports 10000\""
+        iptablesOpt = "-t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 10000"
+        if False == NetSetup.getInstance().checkIpTables(checkOpt) :
+            NetSetup.getInstance().ipTables(iptablesOpt)
+
 
         # ssl-strip & arp
         pass
@@ -24,13 +28,29 @@ class SSLStrip(CommandModule) :
 
 
 
+class ClientConnection:
+    pass
+
+
+class ServerConnection:
+    pass
+
 
 class NetSetup() :
 
+    instance = None
+
+    @staticmethod
+    def getInstance() :
+        if None == NetSetup.instance :
+            NetSetup.instance = NetSetup()
+        return NetSetup.instance
+
+
     # IP Forwarding : be router.
     # If IP Forward is set, all packet allowed.
-    @staticmethod
-    def ipForward() :
+    # @staticmethod
+    def ipForward(self) :
         print("# Set IP Forwarding...")
         ipForwardCommand = "echo 1 > /proc/sys/net/ipv4/ip_forward"
         try :
@@ -41,8 +61,8 @@ class NetSetup() :
 
 
     # Check if IP Forward is set.
-    @staticmethod
-    def checkIpForward() :
+    # @staticmethod
+    def checkIpForward(self) :
         print("# Check IP Forawrding...")
         checkIpForwardCommand = "cat /proc/sys/net/ipv4/ip_forward"
         try :
@@ -54,10 +74,10 @@ class NetSetup() :
 
     # IP Table : packet filtering tool(= firewall).
     # It doesn't filter the packet, it is just the rule of filtering packet.
-    @staticmethod
-    def ipTables(listenPort=10000) :
+    # @staticmethod
+    def ipTables(self, opt) :
         print("# Add a rule to IP Table...")
-        ipTableCommand  = "iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port " + str(listenPort)
+        ipTableCommand  = "iptables " + str(opt)
         try :
             subprocess.run(ipTableCommand, shell=True)
             sleep(1)
@@ -66,10 +86,10 @@ class NetSetup() :
 
 
     # Check if IP Table is added our redirection(port 80 to 10000) rules.
-    @staticmethod
-    def checkIpTables(listenPort=10000) :
+    # @staticmethod
+    def checkIpTables(self, opt) :
         print("# Check IP Tables...")
-        checkIpTableCommand = "iptables -t nat -L -v -n | grep \"dpt:80 redir ports " + str(listenPort)+"\""
+        checkIpTableCommand = "iptables -t nat -L -n | grep " + str(opt)
         try :
             res = (None != subprocess.check_output(checkIpTableCommand, shell=True))
         except Exception as e:
