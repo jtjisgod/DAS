@@ -13,10 +13,11 @@ class SSLStrip(CommandModule) :
             NetSetup.getInstance().ipForward(1)
 
 
+        table = "-t nat"
         checkOpt = "\"tcp dpt:80 redir ports 10000\""
-        iptablesOpt = "-t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 10000"
-        if False == NetSetup.getInstance().checkIpTables(checkOpt) :
-            NetSetup.getInstance().ipTables(iptablesOpt)
+        iptablesOpt = table + " -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 10000"
+        if False == NetSetup.getInstance().checkIpTables(table, checkOpt) :
+            NetSetup.getInstance().ipTables(table, iptablesOpt)
 
 
         # ssl-strip & arp
@@ -87,9 +88,9 @@ class NetSetup() :
 
     # Check if IP Table is added our redirection(port 80 to 10000) rules.
     # @staticmethod
-    def checkIpTables(self, opt) :
+    def checkIpTables(self, table, target) :
         print("# Check IP Tables...")
-        checkIpTableCommand = "iptables -t nat -L -n | grep " + str(opt)
+        checkIpTableCommand = "iptables " + str(table) + " -L -n | grep " + str(target)
         try :
             res = (None != subprocess.check_output(checkIpTableCommand, shell=True))
         except Exception as e:
