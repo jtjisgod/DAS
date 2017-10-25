@@ -10,7 +10,7 @@ class SSLStrip(CommandModule) :
 
     def run(self) :
         if False == NetSetup.getInstance().checkIpForward() :
-            NetSetup.getInstance().ipForward()
+            NetSetup.getInstance().ipForward(1)
 
 
         checkOpt = "\"tcp dpt:80 redir ports 10000\""
@@ -50,9 +50,9 @@ class NetSetup() :
     # IP Forwarding : be router.
     # If IP Forward is set, all packet allowed.
     # @staticmethod
-    def ipForward(self) :
+    def ipForward(self, isForward) :
         print("# Set IP Forwarding...")
-        ipForwardCommand = "echo 1 > /proc/sys/net/ipv4/ip_forward"
+        ipForwardCommand = "echo " + str(isForward) +  " > /proc/sys/net/ipv4/ip_forward"
         try :
             subprocess.run(ipForwardCommand, shell=True)
             sleep(1)
@@ -76,7 +76,7 @@ class NetSetup() :
     # It doesn't filter the packet, it is just the rule of filtering packet.
     # @staticmethod
     def ipTables(self, opt) :
-        print("# Add a rule to IP Table...")
+        print("# Set a rule to IP Table...")
         ipTableCommand  = "iptables " + str(opt)
         try :
             subprocess.run(ipTableCommand, shell=True)
