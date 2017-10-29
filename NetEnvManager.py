@@ -1,3 +1,7 @@
+from time import sleep
+import subprocess
+
+
 class NetEnvManager() :
 
     instance = None
