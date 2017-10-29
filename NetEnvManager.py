@@ -5,7 +5,7 @@ class NetEnvManager() :
     @staticmethod
     def getInstance() :
         if None == NetEnvManager.instance :
-        NetEnvManager.instance = NetEnvManager()
+            NetEnvManager.instance = NetEnvManager()
         return NetEnvManager.instance
 
 
