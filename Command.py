@@ -18,6 +18,8 @@ class Command :
 
         while True :
             c = input("Command : ")
+	    if c == None :
+		c = ""
             if c == "help" :
                 self.viewMenu()
             elif c.strip() == "" :
