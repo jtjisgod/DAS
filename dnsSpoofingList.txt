@@ -1,1 +1,2 @@
-example.com, xxx.xxx.xxx.xxx
+gilgil.net, 202.179.177.21
+jtjsoft.com, 202.179.177.21
